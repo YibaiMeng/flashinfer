@@ -36,10 +36,6 @@ def test_mm_bf16(
     if backend == "cudnn" and not CUDNN_AVAILABLE:
         pytest.skip("cuDNN is not available on this system.")
 
-    if backend == "cudnn" and (enable_bias or pdl):
-        pytest.skip(
-            "mm_bf16 with cuDNN backend does not support bias or pdl arguments."
-        )
     if backend == "cutlass" and (enable_bias or pdl):
         pytest.skip(
             "mm_bf16 with CUTLASS backend does not support bias or pdl arguments."
