@@ -30,6 +30,7 @@ Reference: TensorRT-LLM/tensorrt_llm/_torch/custom_ops/cute_dsl_custom_ops.py
 """
 
 import itertools
+import inspect
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
@@ -60,6 +61,29 @@ from .moe_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _make_tuning_config(
+    *,
+    dynamic_tensor_specs: Tuple[DynamicTensorSpec, ...],
+    tensor_initializers: Tuple[Tuple[int, Callable], ...],
+    **kwargs: Any,
+) -> TuningConfig:
+    """Build a tuning config across the old and new initializer APIs."""
+    initializers_by_index = dict(tensor_initializers)
+    for spec in dynamic_tensor_specs:
+        if hasattr(spec, "tensor_initializers"):
+            spec.tensor_initializers = [
+                initializers_by_index[index] for index in spec.input_idx
+            ]
+
+    config_kwargs = {
+        "dynamic_tensor_specs": dynamic_tensor_specs,
+        **kwargs,
+    }
+    if "tensor_initializers" in inspect.signature(TuningConfig).parameters:
+        config_kwargs["tensor_initializers"] = tensor_initializers
+    return TuningConfig(**config_kwargs)
 
 
 # =============================================================================
@@ -322,7 +346,7 @@ class CuteDslFusedMoENvfp4Runner(TunableRunner):
 
         # Instance-level so dummy expert IDs span all local experts
         # (randint(0, num_experts)) for realistic profiling.
-        self.tuning_config = TuningConfig(
+        self.tuning_config = _make_tuning_config(
             dynamic_tensor_specs=(
                 DynamicTensorSpec(
                     input_idx=(0, 1, 2, 3, 11)
@@ -776,7 +800,7 @@ class CuteDslFusedMoEW4A16Runner(TunableRunner):
 
         # Match production EP routing density while retaining seeded load
         # variance around route-tile boundaries.
-        self.tuning_config = TuningConfig(
+        self.tuning_config = _make_tuning_config(
             dynamic_tensor_specs=(
                 DynamicTensorSpec(
                     input_idx=(0, 1, 2, 9),
